@@ -11,7 +11,12 @@ add_definitions(${NANOGUI_EXTRA_DEFS})
 include_directories(lib/embed-resource)
 add_subdirectory(lib/embed-resource)
 
+SET(TARGET_H WingEdge.h)
+SET(TARGET_H vec3.h)
+
+SET(TARGET_SRC WingEdge.cpp)
+
 embed_resources(MyResources shader/vert.glsl shader/frag.glsl)
 
-add_executable(mytest test.cpp ${MyResources})
-target_link_libraries(mytest nanogui ${NANOGUI_EXTRA_LIBS})
+add_executable(mcaq obj_view.cpp ${MyResources} ${TARGET_H} ${TARGET_SRC})
+target_link_libraries(mcaq nanogui ${NANOGUI_EXTRA_LIBS})
