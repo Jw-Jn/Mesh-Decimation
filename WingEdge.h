@@ -75,6 +75,8 @@ public:
 class WingEdge
 {
 public:
+	WingEdge(){cidx = -1;}
+
 	bool loadOBJfile(std::string filename);
 	bool saveToOBJfile(std::string fname);
 	vec3 getVertex(Wvertex * v) { return v->position; };
@@ -89,15 +91,21 @@ public:
 	float maxdimlength;
 	vec3 center;
 
+	int cidx;
+	Eigen::Matrix4f cQ; // the edge that collapse
+
 private:
 	void convertOBJToWingedEdgeMesh(std::vector<vec3> &vertices, std::vector<vec3> &normals, std::vector<std::vector<int>> &faces);
 	void normalizeEdge(std::vector<vec3> &vertices, std::vector<vec3> &normals, std::vector<std::vector<int>> &faces);
 
 	void computeQuadrics();
-	void multipleChoice(int k);
+	Wvertex * multipleChoice(int k);
 	float computeError(Wedge *edge, Eigen::Vector4f &position);
-	void collapseEdge(Wedge *edge, vec3 position);
+	Wvertex* collapseEdge(Wedge *edge, vec3 position);
 	bool checkCandidate(Wedge *edge);
+	int getValence(Wvertex *v);
+
+	bool reconstructMesh(std::vector<std::vector<int>> newFaces);
 
 	/*vec3 computeButterfly(Wedge *edge);
 	bool reconstructMesh(std::vector<std::vector<int>> newFaces);
