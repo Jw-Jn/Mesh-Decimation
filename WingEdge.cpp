@@ -59,9 +59,9 @@ bool WingEdge::loadOBJfile(std::string filename)
 		for (int j = 0; j < vnum; j++) {
 			vec3 v = vertices[faces[i][j]];
 			vec3 v_pre = vertices[faces[i][(j - 1 + vnum) % vnum]];
-			vec3 v_nxt = vertices[faces[i][(j + 1) % vnum]];
-			double weight = (v_pre - v).vectorDegreeBetween(v_nxt - v);
-			normals[faces[i][j]] = normals[faces[i][j]] + ((v - v_pre) ^ (v_nxt - v)).normalize() * weight;
+			vec3 v_nex = vertices[faces[i][(j + 1) % vnum]];
+			double weight = (v_pre - v).vectorDegreeBetween(v_nex - v);
+			normals[faces[i][j]] = normals[faces[i][j]] + ((v - v_pre) ^ (v_nex - v)).normalize() * weight;
 		}
 	}
 	for (int i = 0; i < normals.size(); ++i)
@@ -109,10 +109,7 @@ void WingEdge::convertOBJToWingedEdgeMesh(std::vector<vec3> &vertices, std::vect
 	// create wvertex and save to vertexlist
 	vertexList.clear();
 	for (int i = 0; i < vertices.size(); i++)
-		{
-			vertexList.push_back(new Wvertex(vertices[i], normals[i], i));
-			// std::cout<<" "<<vertices[i].x<<" "<<vertices[i].y<<" "<<vertices[i].z<<std::endl;
-		}
+		vertexList.push_back(new Wvertex(vertices[i], normals[i], i));
 
 	// create wedge and save to edge
 	edgeList.clear();
@@ -186,7 +183,7 @@ void WingEdge::convertOBJToWingedEdgeMesh(std::vector<vec3> &vertices, std::vect
 std::vector<std::vector<Wvertex *>> WingEdge::extractVerticesOfFaces()
 {
 	// the vertices index
-	std::vector<std::vector<Wvertex *>> vertices(faceList.size());
+	std::vector<std::vector<Wvertex *>> faces(faceList.size());
 
 	for (int i = 0; i < faceList.size(); i++)
 	{
@@ -194,24 +191,37 @@ std::vector<std::vector<Wvertex *>> WingEdge::extractVerticesOfFaces()
 		Wedge *e0 = f->oneEdge;
 		Wedge *edge = e0;
 
-		// std::cout<<"i "<<i<<std::endl;
-
 		// find all the edges related to the face
 		do
 		{
 			Wface *ft = edge->f_right;
-			// std::cout << edge->v_start->idx<<" "<<edge->v_end->idx<< std::endl;
+
 			if (edge->f_right == f)
-			{
 				edge = edge->e_right_pre;
-				// std::cout << edge->v_start->idx<<" "<<edge->v_end->idx<< std::endl;
-			}
+
 			Wvertex *vt = edge->v_start;
-			vertices[i].push_back(edge->v_start);
+			faces[i].push_back(edge->v_start);
 		} while (edge != e0);
 	}
 
-	return vertices;
+	////// update norms ////////////
+	for (int i = 0; i < faces.size(); i++)
+	{
+		int vnum = faces[i].size();
+		for (int j = 0; j < vnum; j++) {
+			vec3 v = faces[i][j]->position;
+			vec3 v_pre = faces[i][(j - 1 + vnum) % vnum]->position;
+			vec3 v_nex = faces[i][(j + 1) % vnum]->position;
+			double weight = (v_pre - v).vectorDegreeBetween(v_nex - v);
+			faces[i][j]->norm = faces[i][j]->norm + ((v - v_pre) ^ (v_nex - v)).normalize() * weight;
+		}
+	}
+
+	for (int i = 0; i < faces.size(); i++)
+		for (int j = 0; j < faces[i].size(); j++)
+			faces[i][j]->norm.normalize();
+
+	return faces;
 }
 
 bool WingEdge::saveToOBJfile(std::string fname)
@@ -265,37 +275,15 @@ bool operator==(const int2 a, const int2 b) {
 
 bool WingEdge::decimation(int k, int target)
 {
-	Wvertex *vc = NULL;
+	bool result = false;
+	computeQuadrics();
 
 	while (target--)
 	{
-		std::cout<<"computeQuadrics"<<std::endl;
-		computeQuadrics();
-
-		// for (int i =0;i<vertexList.size();i++)
-		// {
-		// 	std::cout<<vertexList[i]->Q<<std::endl;
-		// 	std::cout<<std::endl;
-		// }
-
-		// if (cidx != -1)
-		// {
-		// 	vertexList[cidx]->Q = cQ;
-		// 	std::cout<<"aaaaaaaaaa"<<std::endl;
-		// }
-
-		// give back Q to v
-		vc = multipleChoice(k);
-		// if (vc!=NULL)
-		// {
-		// 	cidx = vc->idx;
-		// 	cQ = vc->Q; // the edge that collapse
-		// }
-		// else
-		// 	return false;
+		result = multipleChoice(k);
 	}
-
-	return true;
+	
+	return result;
 }
 
 void WingEdge::computeQuadrics()
@@ -309,8 +297,6 @@ void WingEdge::computeQuadrics()
 		vec3 v3 = e->e_right_nex->v_end->position;
 		vec3 cross = ((v3 - v1) ^ (v2 - v1)).normalize();
 
-		// std::cout << v1.x << ' ' << v1.y << " " << v1.z << std::endl;
-
 		float a = cross.x;
 		float b = cross.y;
 		float c = cross.z;
@@ -321,7 +307,6 @@ void WingEdge::computeQuadrics()
 		int j = 0;
 		do {
 			Wvertex *v = e->v_start;
-			// float d = -(v->position.x*a + v->position.y*b + v->position.z*c);
 			Eigen::Matrix4f k;
 			k << a*a, a*b, a*c, a*d,
 				a*b, b*b, b*c, b*d,
@@ -334,10 +319,9 @@ void WingEdge::computeQuadrics()
 	}
 }
 
-Wvertex* WingEdge::multipleChoice(int k)
+bool WingEdge::multipleChoice(int k)
 {
 	// select k random candidates
-	std::cout<<"collapseCandidates"<<std::endl;
 	std::vector<Wedge *> collapseCandidates;
 
 	int i = k;
@@ -376,23 +360,22 @@ Wvertex* WingEdge::multipleChoice(int k)
 			currentPosition.z = position(2);
 		}
 	}
-	std::cout << "position: " <<currentPosition.x << " " << currentPosition.y << " " << currentPosition.z << std::endl;
-	std::cout << "idxs: "<<currentEdge->v_start->idx << " idxe: " << currentEdge->v_end->idx << std::endl;
-
-	Wvertex *v = NULL;
-
+	
 	// collapse the edge
 	if (currentEdge != NULL)
-		v = collapseEdge(currentEdge, currentPosition);
+	{
+		collapseEdge(currentEdge, currentPosition);
+		return true;
+	}
 	else
+	{
 		std::cout << "can not find an edge to collapse" << std::endl;
-
-	return v;
+		return false;
+	}
 }
 
 bool WingEdge::checkCandidate(Wedge *edge)
 {
-	std::cout << "checkCandidate" << std::endl;
 	Wvertex *va = edge->e_right_nex->v_end;
 	Wvertex *vb = edge->e_left_nex->v_end;
 
@@ -404,28 +387,21 @@ bool WingEdge::checkCandidate(Wedge *edge)
 int WingEdge::getValence(Wvertex *vertex)
 {
 	int v = 0;
+
 	Wedge *e = vertex->oneEdge;
 	Wedge *e0 = e;
 
-	std::cout << "getValence begin" << std::endl;
 	do
 	{
-		std::cout << v << std::endl;
 		e = e->e_left_nex;
-		std::cout << v << std::endl;
 		v += 1;
-		// std::cout << e->v_end->idx << std::endl;
-		// std::cout << v << std::endl;
 	} while (e != e0);
-	std::cout << "getValence end" << std::endl;
 
-	//std::cout << v << std::endl;
 	return v;
 }
 
 float WingEdge::computeError(Wedge *edge, Eigen::Vector4f &position)
 {
-	std::cout << "compute error" << std::endl;
 	Eigen::Matrix4f Q = edge->v_start->Q + edge->v_end->Q;
 	Eigen::Vector4f v;
 	Eigen::Matrix4f temp = Q;
@@ -433,13 +409,10 @@ float WingEdge::computeError(Wedge *edge, Eigen::Vector4f &position)
 	Eigen::Matrix4f inverseQ = temp.inverse();
 	float error;
 
-	// std::cout<<temp<<std::endl;
-
 	// check if Q is inversible
 	if (std::isnan(inverseQ(0, 0)))
 	{
 		// use midpoint or endpoints
-		std::cout << "nan" << std::endl;
 		Eigen::Vector4f v0 = Eigen::Vector4f(edge->v_start->position.x, edge->v_start->position.y, edge->v_start->position.z, 1.0);
 		Eigen::Vector4f v1 = Eigen::Vector4f(edge->v_end->position.x, edge->v_end->position.y, edge->v_end->position.z, 1.0);
 		Eigen::Vector4f vm = Eigen::Vector4f((v0(0) + v1(0))*0.5, (v0(1) + v1(1))*0.5, (v0(2) + v1(2))*0.5, 1.0);
@@ -471,40 +444,27 @@ float WingEdge::computeError(Wedge *edge, Eigen::Vector4f &position)
 		position = v;
 	}
 
-	// std::cout<<"error: "<< error <<std::endl;
-
 	return error;
 }
 
-Wvertex* WingEdge::collapseEdge(Wedge *edge, vec3 position)
+void WingEdge::collapseEdge(Wedge *edge, vec3 position)
 {
-	std::cout << "begin decimating" << std::endl;
-	std::cout << "origin facelist size " << faceList.size() << std::endl;
-	std::vector<std::vector<int>> newFaces;
-
-	std::cout<<"edge end position "<<edge->v_end->position.x<<" "<<edge->v_end->position.y<<" "<<edge->v_end->position.z<<std::endl;
-	std::cout<<"edge start position "<<edge->v_start->position.x<<" "<<edge->v_start->position.y<<" "<<edge->v_start->position.z<<std::endl;
-
+	// "new" vertex
 	Wvertex *vnew = edge->v_end;
 	vnew->position = position;
-
 	vnew->Q += edge->v_start->Q;
+	vnew->oneEdge = edge->e_left_nex->e_left_nex;
 
-	int idxs = edge->v_start->idx;
-	int idxe = edge->v_end->idx;
-
-	// Wedge *eu = edge->e_right_pre->e_left_pre->e_right_nex; // flip(rightn, rightn)
-
+	//// update vertex
 	Wedge *e = edge->e_left_nex->e_left_nex;
 
 	int count = getValence(edge->v_start);
-	std::cout << "valence: " << count << std::endl;
 
-	if (count>=3)
+	if (count >= 3)
 	{
 		count = 0;
 		// update vertex idx
-		while(e != edge)
+		while (e != edge)
 		{
 			e->v_start = vnew;
 			e->e_right_pre->v_end = vnew;
@@ -513,573 +473,81 @@ Wvertex* WingEdge::collapseEdge(Wedge *edge, vec3 position)
 		}
 	}
 
-	std::cout << "count: " << count << std::endl;
+	//// update four edge relations
+	Wedge *edge_up_right = edge->e_right_pre->e_left_pre->e_right_nex; // flip(rightp)
 
-	std::vector<int> face;
+	Wedge *edge_up_left = edge->e_right_nex->e_left_pre->e_right_nex; // flip(rightn)
 
-	std::vector<int> newFaceIdx;
+	Wedge *edge_down_right = edge->e_left_nex->e_left_pre->e_right_nex; // flip(left next)
 
-	// delete face
+	Wedge *edge_down_left = edge->e_left_pre->e_left_pre->e_right_nex; // flip(left pre)
+
+	// up right
+	edge_up_right->e_left_nex = edge_up_left->e_right_nex;
+	edge_up_right->e_left_pre = edge_up_left->e_right_pre;
+
+	// up left
+	edge_up_left->e_left_nex = edge_up_right->e_right_nex;
+	edge_up_left->e_left_pre = edge_up_right->e_right_pre;
+
+	// down right
+	edge_down_right->e_left_nex = edge_down_left->e_right_nex;
+	edge_down_right->e_left_pre = edge_down_left->e_right_pre;
+
+	// down left
+	edge_down_left->e_left_nex = edge_down_right->e_right_nex;
+	edge_down_left->e_left_pre = edge_down_right->e_right_pre;
+
+	// update vertex->one edge
+	edge_up_left->v_start->oneEdge = edge_up_left;
+	edge_down_right->v_start->oneEdge = edge_down_right;
+
+	//// update edge face
+	edge_up_right->f_left = edge_up_left->f_right;
+	edge_up_left->f_left = edge_up_right->f_right;
+
+	edge_down_right->f_left = edge_down_left->f_right;
+	edge_down_left->f_left = edge_down_right->f_right;
+
+	//// detele vertex, edge, face and erase from the list
+	Wvertex *vs = edge->v_start;
+	Wface *fup = edge->f_right;
+	Wface *fdown = edge->f_left;
+
+	// delete edges
+	edge->e_right_nex->v_start = vs;
+	edge->e_left_pre->v_start = vs;
+
+	std::vector<Wedge *>::iterator eit;
+	for (eit = edgeList.begin(); eit != edgeList.end();)
+	{
+		if ((*eit)->v_start == vs || (*eit)->v_end == vs)
+		{
+			delete *eit;
+			eit = edgeList.erase(eit);
+		}
+		else
+			eit++;
+	}
+
+	// delete faces
 	std::vector<Wface *>::iterator fit;
 	for (fit = faceList.begin(); fit != faceList.end();)
 	{
-		Wedge *e0 = (*fit)->oneEdge;
-		int flag = 0;
-		e = e0;
-		do
+		if ((fup && (*fit) == fup) || (fdown && (*fit) == fdown))
 		{
-			//std::cout << "idx: "<<e->v_end->idx << std::endl;
-			if (e->v_start->idx == idxs)
-			{
-				flag = 1;
-				break;
-			}
-			e = e->e_right_nex;
-		} while (e0 != e);
-
-		//std::cout << " " << std::endl;
-
-		if (flag)
+			delete *fit;
 			fit = faceList.erase(fit);
+		}
 		else
 			fit++;
 	}
 
-	// update idx
-	int idx = vertexList.size();
-	for (int k = 0; k < vertexList.size(); k++)
-	{
-		if (k > idx)
-			vertexList[k]->idx -= 1;
+	// delete vertex
+	int idxs = vs->idx;
+	for (int k = idxs+1; k < vertexList.size(); k++)
+		vertexList[k]->idx -= 1;
 
-		if (vertexList[k] == edge->v_start)
-		{
-			idx = k;
-			vertexList[k]->idx = -1;
-		}
-	}
-
-	// go through faceList, push back to new face, anticlock give idx
-	for (int i = 0; i < faceList.size(); i++)
-	{
-		Wedge *e0 = faceList[i]->oneEdge;
-		e = e0;
-		// clock wise
-		do
-		{
-			// std::cout << "idx: "<<e->v_end->idx << std::endl;
-			face.push_back(e->v_end->idx);
-			e = e->e_right_nex;
-		} while (e0 != e);
-
-		int temp = face[1];
-		face[1] = face[2];
-		face[2] = temp;
-
-		// std::cout << face[0] << " " << face[1] << " " << face[2] << " " << std::endl;
-
-		newFaces.push_back(face);
-		face.clear();
-	}
-
-	std::cout <<"after deleting facelist size " << newFaces.size() << std::endl;
-
-	// update vertexlist
-	delete vertexList[idx];
-	vertexList.erase(vertexList.begin() + idx);
-
-	// for (int k = 0; k < vertexList.size(); k++)
-		// std::cout<<vertexList[idx]->position.x<< " "<<vertexList[idx]->position.y<< " "<<vertexList[idx]->position.z<<std::endl;
-
-	std::cout <<"after deleting vertexList size " << vertexList.size() << std::endl;
-
-	bool result = reconstructMesh(newFaces);
-
-	newFaces.clear();
-
-	std::cout <<"result " << result << std::endl;
-
-	std::cout << std::endl;
-
-	return vnew;
+	delete vertexList[idxs];
+	vertexList.erase(vertexList.begin() + idxs);
 }
-
-bool WingEdge::reconstructMesh(std::vector<std::vector<int>> newFaces)
-{
-	std::vector<vec3> vertices;
-	std::vector<vec3> normals;
-
-	vertices.clear();
-	normals.clear();
-
-	// std::cout <<"reconstructMesh vertex " << std::endl;
-	for (int i = 0; i < vertexList.size(); i++)
-	{
-		// load a vertex
-		vec3 v = vertexList[i]->position;
-		vertices.push_back(v);
-	}
-
-	// std::cout <<"reconstructMesh normal " << std::endl;
-	// Estimate normals of vertices with the weights defined by angles around them
-	normals = std::vector<vec3>(vertices.size(), vec3(0, 0, 0));
-	for (int i = 0; i < newFaces.size(); i++)
-	{
-		int vnum = newFaces[i].size();
-		for (int j = 0; j < vnum; j++) {
-			vec3 v = vertices[newFaces[i][j]];
-			vec3 v_pre = vertices[newFaces[i][(j - 1 + vnum) % vnum]];
-			vec3 v_nex = vertices[newFaces[i][(j + 1) % vnum]];
-			double weight = (v_pre - v).vectorDegreeBetween(v_nex - v);
-			normals[newFaces[i][j]] = normals[newFaces[i][j]] + ((v - v_pre) ^ (v_nex - v)).normalize() * weight;
-		}
-	}
-	for (int i = 0; i < normals.size(); ++i)
-		normals[i].normalize();
-
-	// std::cout <<"reconstructMesh normalizeEdge " << std::endl;
-	normalizeEdge(vertices, normals, newFaces);
-
-	// std::cout <<"reconstructMesh convertOBJToWingedEdgeMesh " << std::endl;
-	// convert the mesh to winged-edge form
-	convertOBJToWingedEdgeMesh(vertices, normals, newFaces);
-
-	return true;
-}
-
-/*
-bool WingEdge::subdivision(std::string method)
-{
-	// new face list
-	std::vector<std::vector<int>> newFaces;
-
-	std::cout << method << std::endl;
-	if (method.compare("Butterfly")==0)
-	{
-		newFaces.clear();
-		int faceNum = faceList.size();
-		std::map<int2, int> cutMap;
-
-		std::vector<int> evenVertices;
-		std::vector<int> oddVertices;
-
-		// for all faces
-		for (int i = 0; i < faceNum; i++)
-		{
-			evenVertices.clear();
-			oddVertices.clear();
-
-			Wedge *e0 = faceList[i]->oneEdge;
-			Wedge *edge = e0;
-
-			// while !=e0
-			do
-			{
-				// edge->end()->idx, save to even
-				int startIdx = edge->v_start->idx;
-				int endIdx = edge->v_end->idx;
-
-				evenVertices.push_back(endIdx);
-
-				// check edge devided?
-				int2 edgeIdx = int2(startIdx, endIdx);
-				if (startIdx > endIdx)
-					edgeIdx = int2(endIdx, startIdx);
-
-				int vertexIdx;
-
-				std::pair<std::map<int2, int >::iterator, bool> res = cutMap.insert(std::pair<int2, int>(edgeIdx, -1));
-				// not devided
-				if (res.second) {
-					// compute vertex
-					Wvertex *v = new Wvertex();
-					v->position = computeButterfly(edge);
-
-					// insert to vertexlist
-					vertexList.push_back(v);
-
-					// save idx to map
-					cutMap[edgeIdx] = vertexList.size() - 1;
-
-					vertexIdx = vertexList.size() - 1;
-
-				}
-				// devided
-				else {
-					// get idx
-					vertexIdx = res.first->second;
-				}
-
-				//save to odd
-				oddVertices.push_back(vertexIdx);
-
-				edge = edge->e_right_nex;
-
-			} while (edge != e0);
-
-			// odd[0,1,2]; odd[0,1]even[0]; odd[1,2]even[1]; odd[2,0]even[2];
-			// face list insert vertexidx -> face
-			int num = oddVertices.size();
-			std::vector<int> face;
-
-			for (int j = 0; j < num; j++)
-			{
-				face.clear();
-				face.push_back(oddVertices[j]);
-				face.push_back(oddVertices[(j + 1) % num]);
-				face.push_back(evenVertices[j]);
-				newFaces.push_back(face);
-			}
-
-			face.clear();
-			for (int j = 0; j < num; j++)
-				face.push_back(oddVertices[num - 1 - j]);
-			newFaces.push_back(face);
-
-		}
-
-		bool result = reconstructMesh(newFaces);
-		return result;
-	}
-
-	else
-	{
-		std::cout << "loop" << std::endl;
-
-		std::vector<Wvertex *> vertexList_newPosition;
-
-		for (int i = 0; i < vertexList.size(); i++)
-		{
-			Wvertex *v = new Wvertex;
-			vertexList_newPosition.push_back(v);
-		}
-
-		newFaces.clear();
-		int faceNum = faceList.size();
-		std::map<int2, int> cutMap;
-
-		std::vector<int> evenVertices;
-		std::vector<int> oddVertices;
-
-		// for all faces
-		for (int i = 0; i < faceNum; i++)
-		{
-			evenVertices.clear();
-			oddVertices.clear();
-
-			Wedge *e0 = faceList[i]->oneEdge;
-			Wedge *edge = e0;
-
-			// while !=e0
-			do
-			{
-				// edge->end()->idx, save to even
-				int startIdx = edge->v_start->idx;
-				int endIdx = edge->v_end->idx;
-
-				evenVertices.push_back(endIdx);
-				vec3 newPosition = computeLoopVectex(edge);
-				// compute again
-				vertexList_newPosition[endIdx]->position = newPosition;
-
-				// check edge devided?
-				int2 edgeIdx = int2(startIdx, endIdx);
-				if (startIdx > endIdx)
-					edgeIdx = int2(endIdx, startIdx);
-
-				int vertexIdx;
-
-				std::pair<std::map<int2, int >::iterator, bool> res = cutMap.insert(std::pair<int2, int>(edgeIdx, -1));
-				// not devided
-				if (res.second) {
-					// compute vertex
-					Wvertex *v = new Wvertex();
-					v->position = computeLoopEdge(edge);
-
-					// insert to vertexlist
-					vertexList.push_back(v);
-
-					// save idx to map
-					cutMap[edgeIdx] = vertexList.size() - 1;
-
-					vertexIdx = vertexList.size() - 1;
-
-				}
-				// devided
-				else {
-					// get idx
-					vertexIdx = res.first->second;
-				}
-
-				//save to odd
-				oddVertices.push_back(vertexIdx);
-
-				edge = edge->e_right_nex;
-
-			} while (edge != e0);
-
-			// odd[2,1,0]; odd[0,1]even[0]; odd[1,2]even[1]; odd[2,0]even[2];
-			// face list insert vertexidx -> face
-			int num = oddVertices.size();
-			std::vector<int> face;
-
-			for (int j = 0; j < num; j++)
-			{
-				face.clear();
-				face.push_back(oddVertices[j]);
-				face.push_back(oddVertices[(j + 1) % num]);
-				face.push_back(evenVertices[j]);
-				newFaces.push_back(face);
-			}
-
-			face.clear();
-			for (int j = 0; j < num; j++)
-				face.push_back(oddVertices[num - 1 - j]);
-			newFaces.push_back(face);
-		}
-
-		for (int i = 0; i < vertexList_newPosition.size(); i++)
-			vertexList[i]->position = vertexList_newPosition[i]->position;
-
-		bool result = reconstructMesh(newFaces);
-		return result;
-	}
-	return false;
-}
-
-vec3 WingEdge::computeLoopEdge(Wedge *e)
-{
-	vec3 position(0, 0, 0);
-	position = position + e->v_end->position*(3.0 / 8.0);
-	position = position + e->v_start->position*(3.0 / 8.0);
-	position = position + e->e_right_nex->v_end->position*(1.0 / 8.0);
-	position = position + e->e_left_nex->v_end->position*(1.0 / 8.0);
-
-	return position;
-}
-
-vec3 WingEdge::computeLoopVectex(Wedge *e)
-{
-	int k = 0;
-	std::vector<vec3> vertices;
-	vec3 position = e->v_end->position;
-	Wedge *e0 = e->e_left_pre->e_right_nex;
-	Wedge *edge = e0;
-	vertices.clear();
-	do
-	{
-		vertices.push_back(edge->v_end->position);
-		edge = edge->e_left_nex;
-		k += 1;
-	} while (edge != e0);
-
-	float beta = (1.0 / k)*(5.0 / 8.0 - (3.0 / 8.0 + 0.25*cos(6.28 / k))*(3.0 / 8.0 + 0.25*cos(6.28 / k)));
-
-	position = position*(1.0 - k * beta);
-
-	for (int i = 0; i < vertices.size(); i++)
-		position = position + vertices[i] * beta;
-
-	return position;
-}
-
-bool WingEdge::reconstructMesh(std::vector<std::vector<int>> newFaces)
-{
-	std::vector<vec3> vertices;
-	std::vector<vec3> normals;
-
-	vertices.clear();
-	normals.clear();
-
-	for (int i=0; i<vertexList.size(); i++)
-	{
-		// load a vertex
-		vec3 v = vertexList[i]->position;
-		vertices.push_back(v);
-	}
-
-	// Estimate normals of vertices with the weights defined by angles around them
-	normals = std::vector<vec3>(vertices.size(), vec3(0, 0, 0));
-	for (int i = 0; i < newFaces.size(); i++)
-	{
-		int vnum = newFaces[i].size();
-		for (int j = 0; j < vnum; j++) {
-			vec3 v = vertices[newFaces[i][j]];
-			vec3 v_pre = vertices[newFaces[i][(j - 1 + vnum) % vnum]];
-			vec3 v_nxt = vertices[newFaces[i][(j + 1) % vnum]];
-			double weight = (v_pre - v).vectorDegreeBetween(v_nxt - v);
-			normals[newFaces[i][j]] = normals[newFaces[i][j]] + ((v - v_pre) ^ (v_nxt - v)).normalize() * weight;
-		}
-	}
-	for (int i = 0; i < normals.size(); ++i)
-		normals[i].normalize();
-
-	normalizeEdge(vertices, normals, newFaces);
-
-	// convert the mesh to winged-edge form
-	convertOBJToWingedEdgeMesh(vertices, normals, newFaces);
-
-	return true;
-}
-
-vec3 WingEdge::computeButterfly(Wedge *e0)
-{
-	int leftD = countFace(e0->e_left_pre->e_right_nex);
-	int rightD = countFace(e0);
-
-	vec3 position;
-	std::vector<vec3> pts;
-
-	if (leftD == rightD && rightD == 6)
-	{
-		pts.clear();
-		pts.push_back(vec3(e0->v_end->position));
-		pts.push_back(vec3(e0->v_start->position));
-
-		Wedge *edge = e0->e_right_nex;
-		pts.push_back(vec3(edge->v_end->position));
-		pts.push_back(vec3(edge->e_left_pre->v_start->position));
-
-		edge = edge->e_right_nex;
-		pts.push_back(vec3(edge->e_left_nex->v_end->position));
-
-		edge = e0->e_left_nex;
-		pts.push_back(vec3(edge->v_end->position));
-		pts.push_back(vec3(edge->e_left_pre->v_start->position));
-
-		edge = edge->e_right_nex;
-		pts.push_back(vec3(edge->e_left_nex->v_end->position));
-
-		position = pts[0] * 0.5 + pts[1] * 0.5
-			+ pts[2] * 0.125 - pts[3] * 0.0625 - pts[4] * 0.0625
-			+ pts[5] * 0.125 - pts[6] * 0.0625 - pts[7] * 0.0625;
-
-		return position;
-	}
-	else
-	{
-		if (leftD == 6)
-			position = computeButterflyPts(e0, rightD, false);
-		else if (rightD == 6)
-			position = computeButterflyPts(e0, leftD, true);
-		else
-		{
-			vec3 p1 = computeButterflyPts(e0, leftD, true);
-			vec3 p2 = computeButterflyPts(e0, rightD, false);
-			position = (p1 + p2) / 2;
-		}
-		return position;
-	}
-}
-
-vec3 WingEdge::computeButterflyPts(Wedge *e0, int k, bool left)
-{
-	Wedge *edge = e0;
-
-	std::vector<vec3> s(k);
-	vec3 position;
-
-	if (left)
-	{
-		vec3 q = edge->v_end->position;
-		if (k == 3)
-		{
-			s[0] = edge->v_start->position;
-			edge = edge->e_right_nex;
-			s[1] = edge->v_end->position;
-			edge = edge->e_left_pre;
-			s[2] = edge->v_start->position;
-			position = s[2] * (-1.0 / 12.0) + (s[0] + s[1])*(5.0 / 12.0) + q * (1 - (-1.0 / 12) - (5.0 / 12.0) * 2);
-		}
-		else if (k == 4)
-		{
-			s[0] = edge->v_start->position;
-			edge = edge->e_right_nex->e_left_pre;
-			s[1] = edge->v_start->position;
-			position = s[1] * (-1.0 / 8.0) + s[0] * (3.0 / 8.0) + q * (1 - (-1.0 / 8.0) - (3.0 / 8.0));
-		}
-		else
-		{
-			int i = 0;
-			e0 = e0->e_left_pre->e_right_nex; // flip
-			edge = e0;
-			do
-			{
-				s[i] = edge->v_end->position;
-				edge = edge->e_left_nex;
-				i++;
-			} while (edge != e0);
-
-			float sum = 0.0;
-			float sj = 0.0;
-
-			for (i = 0; i < k; i++)
-			{
-				sj = (1.0 / k)*(1.0 / 4.0 + cos(2.0 * i*3.14 / k) + (1.0 / 2.0)*cos(4.0 * i*3.14 / k));
-				position = position + s[i] * sj;
-				sum += sj;
-			}
-			position = position + q * (1.0 - sum);
-		}
-	}
-	else
-	{
-		vec3 q = edge->v_start->position;
-
-		if (k == 3)
-		{
-			s[0] = edge->v_end->position;
-			edge = edge->e_right_pre;
-			s[1] = edge->v_start->position;
-			edge = edge->e_left_nex;
-			s[2] = edge->v_end->position;
-			position = s[2] * (-1.0 / 12.0) + (s[0] + s[1])*(5.0 / 12.0) + q * (1 - (-1.0 / 12) - (5.0 / 12.0) * 2);
-		}
-		else if (k == 4)
-		{
-			s[0] = edge->v_end->position;
-			edge = edge->e_right_pre->e_left_nex;
-			s[1] = edge->v_end->position;
-			position = s[1] * (-1.0 / 8.0) + s[0] * (3.0 / 8.0) + q * (1 - (-1.0 / 8.0) - (3.0 / 8.0));
-		}
-		else
-		{
-			int i = 0;
-			edge = e0;
-			do
-			{
-				s[i] = edge->v_end->position;
-				edge = edge->e_left_nex;
-				i++;
-			} while (edge != e0);
-
-			float sum = 0.0;
-			float sj = 0.0;
-
-			for (i = 0; i < k; i++)
-			{
-				sj = (1.0 / k)*(1.0 / 4.0 + cos(2.0 * i*3.14 / k) + (1.0 / 2.0)*cos(4.0 * i*3.14 / k));
-				position = position + s[i] * sj;
-				sum += sj;
-			}
-			position = position + q * (1.0 - sum);
-		}
-	}
-
-
-	return position;
-}
-
-int WingEdge::countFace(Wedge *e)
-{
-	int count = 0;
-	Wedge *edge = e;
-	do
-	{
-		edge = edge->e_left_nex;
-		count+=1;
-	} while (edge != e);
-
-	return count;
-}
-*/

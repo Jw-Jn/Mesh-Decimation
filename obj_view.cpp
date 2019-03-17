@@ -199,15 +199,22 @@ public:
 	}
 
 	void decimation() {
-		// std::cout<<k<<" "<<collapseNum<<std::endl;
-		mesh.decimation(k, collapseNum);
+
+		if ((collapseNum*2) < faceNum)
+		{
+			bool result = mesh.decimation(k, collapseNum);
+			if (!result)
+				std::cout<<"nothing to collapse!"<<std::endl;
+		}
+		else
+			std::cout<<"nothing to collapse!"<<std::endl;
 	}
 
 	void updateMesh(){
 		std::vector<std::vector<Wvertex *>> faces = mesh.extractVerticesOfFaces();
 		faceNum = faces.size();
 
-		std::cout << faceNum << std::endl;
+		std::cout << "faceNum: " <<faceNum << std::endl;
 
 		positions = MatrixXf(3, faceNum *9);
 		normals = MatrixXf(3, faceNum *9);
@@ -473,40 +480,17 @@ public:
 		});
 		textBox->setFontSize(20);
 		textBox->setAlignment(TextBox::Alignment::Right);
-		
-		// subdivision 
-		/*new Label(anotherWindow, "Subdivision", "sans-bold");
-
-		Widget *panelDiv = new Widget(anotherWindow);
-		panelDiv->setLayout(new BoxLayout(Orientation::Horizontal,
-			Alignment::Middle, 0, 20));
-
-		TextBox *textBoxDiv = new TextBox(panelDiv);
-		textBoxDiv->setValue("1");
-		textBoxDiv->setFontSize(20);
-		textBoxDiv->setAlignment(TextBox::Alignment::Right);
-
-		ComboBox *comboDiv = new ComboBox(panelDiv, { "Butterfly", "Loop"});
-		comboDiv->setFixedWidth(150);
-		comboDiv->setCallback([&](int value) {
-			mCanvas->setDivMethod(value);
-		});
-
-		b = new Button(anotherWindow, "Start Subdivision");
-		b->setCallback([&] {
-			mCanvas->subdivision();
-			mCanvas->updateMesh();
-		});*/
 
 		// mesh decimation
 		new Label(anotherWindow, "Decimation", "sans-bold");
 
 		Widget *panelDec = new Widget(anotherWindow);
 		panelDec->setLayout(new BoxLayout(Orientation::Horizontal,
-			Alignment::Middle, 0, 20));
+			Alignment::Middle, 0, 10));
 
 		{new Label(panelDec, "k :", "sans-bold");
 		TextBox *textBoxK = new TextBox(panelDec);
+		textBoxK->setFixedSize(Vector2i(45, 25));
 		textBoxK->setEditable(true);
 		textBoxK->setValue("1");
 		textBoxK->setFontSize(20);
@@ -524,6 +508,7 @@ public:
 
 		{new Label(panelDec, "collapse num :", "sans-bold");
 		TextBox *textBoxEdges = new TextBox(panelDec);
+		textBoxEdges->setFixedSize(Vector2i(45, 25));
 		textBoxEdges->setEditable(true);
 		textBoxEdges->setValue("1");
 		textBoxEdges->setFontSize(20);
